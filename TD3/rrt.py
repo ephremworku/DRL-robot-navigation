@@ -1,11 +1,4 @@
-"""
 
-Path planning with Rapidly-Exploring Random Trees (RRT)
-
-author: Aakash(@nimrobotics)
-web: nimrobotics.github.io
-
-"""
 
 import cv2
 import numpy as np

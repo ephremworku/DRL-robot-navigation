@@ -72,6 +72,6 @@ Rviz:
 </p>
 RRT Algorithm:
 <p align="center">
-    <img width=80% src="(https://raw.githubusercontent.com/ephremworku/DRL-robot-navigation/main/map%20with%20path%20planning.jpg)">
+    <img width=80% src="https://raw.githubusercontent.com/ephremworku/DRL-robot-navigation/main/map%20with%20path%20planning.jpg">
 </p>
 

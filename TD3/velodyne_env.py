@@ -24,13 +24,15 @@ TIME_DELTA = 0.1
 
 # Check if the random goal position is located on an obstacle and do not accept it if it is
 def check_pos(x, y):
+
+    # for World one
     goal_ok = True
 
     if -3.8 > x > -6.2 and 6.2 > y > 3.8:
         goal_ok = False
 
-    if -1.3 > x > -2.7 and 4.7 > y > -0.2:
-        goal_ok = False
+    # if -1.3 > x > -2.7 and 4.7 > y > -0.2:
+    #     goal_ok = False
 
     if -0.3 > x > -4.2 and 2.7 > y > 1.3:
         goal_ok = False
@@ -59,13 +61,14 @@ def check_pos(x, y):
     if x > 4.5 or x < -4.5 or y > 4.5 or y < -4.5:
         goal_ok = False
 
-    return goal_ok
+    return True
 
 
 class GazeboEnv:
     """Superclass for all Gazebo environments."""
 
     def __init__(self, launchfile, environment_dim):
+        self.init_robot_pos = False
         self.environment_dim = environment_dim
         self.odom_x = 0
         self.odom_y = 0
@@ -152,7 +155,10 @@ class GazeboEnv:
         self.last_odom = od_data
 
     # Perform an action and read a new state
-    def step(self, action):
+    def step(self, action, goals = None):
+        if goals is not None:
+            self.goal_x = goals[0]
+            self.goal_y = goals[1]
         target = False
 
         # Publish the robot action
@@ -180,6 +186,8 @@ class GazeboEnv:
 
         # read velodyne laser state
         done, collision, min_laser = self.observe_collision(self.velodyne_data)
+        if collision:
+            self.init_robot_pos = True
         v_state = []
         v_state[:] = self.velodyne_data[:]
         laser_state = [v_state]
@@ -223,25 +231,22 @@ class GazeboEnv:
 
         # Detect if the goal has been reached and give a large positive reward
         if distance < GOAL_REACHED_DIST:
+            # set a random goal in empty space in environment
+            # self.change_goal()
+            # randomly scatter boxes in the environment
+            # self.random_box()
             target = True
             done = True
 
         robot_state = [distance, theta, action[0], action[1]]
         state = np.append(laser_state, robot_state)
         reward = self.get_reward(target, collision, action, min_laser)
-        return state, reward, done, target
-
-    def reset(self):
-
-        # Resets the state of the environment and returns an initial observation.
-        rospy.wait_for_service("/gazebo/reset_world")
-        try:
-            self.reset_proxy()
-
-        except rospy.ServiceException as e:
-            print("/gazebo/reset_simulation service call failed")
-
-        angle = np.random.uniform(-np.pi, np.pi)
+        #for running the robot with reseting for the intermidet paths lets add collision
+        return state, reward, done, target, collision
+    
+    # doesn't have use this method
+    def robot_pos_init(self):
+        angle = np.pi/2 #np.random.uniform(-np.pi, np.pi)
         quaternion = Quaternion.from_euler(0.0, 0.0, angle)
         object_state = self.set_self_state
 
@@ -264,10 +269,81 @@ class GazeboEnv:
         self.odom_x = object_state.pose.position.x
         self.odom_y = object_state.pose.position.y
 
+
+    def reset(self, initial_rob_pos = None, initial_goal_pos = None, initial_robot_heading_angle = None, random_box_onoff = True):
+        if initial_rob_pos is not None:
+            # Resets the state of the environment and returns an initial observation.
+            rospy.wait_for_service("/gazebo/reset_world")
+            try:
+                self.reset_proxy()
+            except rospy.ServiceException as e:
+                print("/gazebo/reset_simulation service call failed")
+            angle = np.pi/2 #np.random.uniform(-np.pi, np.pi)
+            if initial_robot_heading_angle is not None:
+                angle = initial_robot_heading_angle #np.random.uniform(-np.pi, np.pi)
+            quaternion = Quaternion.from_euler(0.0, 0.0, angle)
+            object_state = self.set_self_state
+            x = 0
+            y = 0
+            position_ok = False
+            increament_pos = 0
+            while not position_ok:
+                x = initial_rob_pos[0] 
+                y = initial_rob_pos[1]
+                position_ok = check_pos(x, y)
+                print(position_ok, x, y)
+            object_state.pose.position.x = x
+            object_state.pose.position.y = y
+            # object_state.pose.position.z = 0.
+            object_state.pose.orientation.x = quaternion.x
+            object_state.pose.orientation.y = quaternion.y
+            object_state.pose.orientation.z = quaternion.z
+            object_state.pose.orientation.w = quaternion.w
+            self.set_state.publish(object_state)
+
+            self.odom_x = object_state.pose.position.x
+            self.odom_y = object_state.pose.position.y
+        else:
+            # Resets the state of the environment and returns an initial observation.
+            rospy.wait_for_service("/gazebo/reset_world")
+            try:
+                self.reset_proxy()
+
+            except rospy.ServiceException as e:
+                print("/gazebo/reset_simulation service call failed")
+            
+            angle = np.random.uniform(-np.pi, np.pi)
+            quaternion = Quaternion.from_euler(0.0, 0.0, angle)
+            object_state = self.set_self_state
+
+            x = 0
+            y = 0
+            position_ok = False
+            while not position_ok:
+                x = np.random.uniform(-4.5, 4.5)
+                y = np.random.uniform(-4.5, 4.5)
+                position_ok = check_pos(x, y)
+            object_state.pose.position.x = x
+            object_state.pose.position.y = y
+            # object_state.pose.position.z = 0.
+            object_state.pose.orientation.x = quaternion.x
+            object_state.pose.orientation.y = quaternion.y
+            object_state.pose.orientation.z = quaternion.z
+            object_state.pose.orientation.w = quaternion.w
+            self.set_state.publish(object_state)
+
+            self.odom_x = object_state.pose.position.x
+            self.odom_y = object_state.pose.position.y
+
         # set a random goal in empty space in environment
-        self.change_goal()
+        if initial_goal_pos is not None:
+            self.goal_x = initial_goal_pos[0]
+            self.goal_y = initial_goal_pos[1]
+        # else:
+            # self.change_goal()
         # randomly scatter boxes in the environment
-        self.random_box()
+        # if random_box_onoff:
+        #     self.random_box()
         self.publish_markers([0.0, 0.0])
 
         rospy.wait_for_service("/gazebo/unpause_physics")

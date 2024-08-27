@@ -154,6 +154,8 @@ class TD3(object):
 
             # Select the minimal Q value from the 2 calculated values
             target_Q = torch.min(target_Q1, target_Q2)
+            self.writer.add_scalar("target_Q/iteration", torch.mean(target_Q), self.iter_count)
+
             av_Q += torch.mean(target_Q)
             max_Q = max(max_Q, torch.max(target_Q))
             # Calculate the final Q value from the target network parameters by using Bellman equation
@@ -164,6 +166,7 @@ class TD3(object):
 
             # Calculate the loss between the current Q value and the target Q value
             loss = F.mse_loss(current_Q1, target_Q) + F.mse_loss(current_Q2, target_Q)
+            self.writer.add_scalar("critic_loss/iteration", loss, self.iter_count)
 
             # Perform the gradient descent
             self.critic_optimizer.zero_grad()
@@ -175,6 +178,8 @@ class TD3(object):
                 # (essentially perform gradient ascent)
                 actor_grad, _ = self.critic(state, self.actor(state))
                 actor_grad = -actor_grad.mean()
+                self.writer.add_scalar("actor_loss/iteration", actor_grad, self.iter_count)
+                
                 self.actor_optimizer.zero_grad()
                 actor_grad.backward()
                 self.actor_optimizer.step()

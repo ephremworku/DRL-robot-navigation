@@ -46,7 +46,7 @@ class TD3(object):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # cuda or cpu
 seed = 0  # Random seed number
 max_ep = 500  # maximum number of steps per episode
-file_name = "TD3_velodyne"  # name of the file to load the policy from
+file_name = "td3_velodyne"  # name of the file to load the policy from
 
 
 # Create the testing environment
@@ -59,6 +59,14 @@ np.random.seed(seed)
 state_dim = environment_dim + robot_dim
 action_dim = 2
 
+
+
+way_points = [(u[0], u[1]) for u in np.loadtxt('output.txt')]
+
+
+way_points_or_not = False
+robot_initial_heading_angle = -np.loadtxt('heading.txt')
+
 # Create the network
 network = TD3(state_dim, action_dim)
 try:
@@ -66,24 +74,69 @@ try:
 except:
     raise ValueError("Could not load the stored model parameters")
 
-done = False
+done = True
 episode_timesteps = 0
-state = env.reset()
+# at the begining of the robot this argument passes 3 parameters:
+# Robot initial point: way_points[0]
+# initial way point: way_points[1]
+# Robot initial orientation: robot_intial_heading_angle
+if not way_points_or_not:
+    state = env.reset(way_points[0], way_points[-1])
+else:
+    state = env.reset(way_points[0], way_points[1], robot_initial_heading_angle, False)
+
+way_points_counter = 1
 
 # Begin the testing loop
 while True:
-    action = network.get_action(np.array(state))
+    if way_points_or_not:
+        action = network.get_action(np.array(state))
+        way_points_to_pass = way_points[way_points_counter]
 
-    # Update action to fall in range [0,1] for linear velocity and [-1,1] for angular velocity
-    a_in = [(action[0] + 1) / 2, action[1]]
-    next_state, reward, done, target = env.step(a_in)
-    done = 1 if episode_timesteps + 1 == max_ep else int(done)
+        # Update action to fall in range [0,1] for linear velocity and [-1,1] for angular velocity
+        a_in = [(action[0] + 1) / 3, action[1]]
+        next_state, reward, done, target, collision = env.step(a_in, way_points_to_pass)
+        done = 1 if episode_timesteps + 1 == max_ep else int(done)
+        if target:
+            way_points_counter+=1
+            if way_points_counter == len(way_points):
+                state = env.reset()
+                done = False
+                episode_timesteps = 0
+                way_points_counter = 0
 
-    # On termination of episode
-    if done:
-        state = env.reset()
-        done = False
-        episode_timesteps = 0
+
+        # On termination of episode
+        if collision:
+            state = env.reset()
+            done = False
+            episode_timesteps = 0
+        else:
+            state = next_state
+            episode_timesteps += 1
     else:
-        state = next_state
-        episode_timesteps += 1
+        action = network.get_action(np.array(state))
+        way_points_to_pass = way_points[way_points_counter]
+
+        # Update action to fall in range [0,1] for linear velocity and [-1,1] for angular velocity
+        a_in = [(action[0] + 1) / 2, action[1]]
+        next_state, reward, done, target, collision = env.step(a_in)
+        done = 1 if episode_timesteps + 1 == max_ep else int(done)
+        if target:
+            way_points_counter+=1
+            if way_points_counter == len(way_points):
+                state = env.reset()
+                done = False
+                episode_timesteps = 0
+                way_points_counter = 0
+
+
+        # On termination of episode
+        if collision:
+            state = env.reset()
+            done = False
+            episode_timesteps = 0
+        else:
+            state = next_state
+            episode_timesteps += 1
+
